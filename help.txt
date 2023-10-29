@@ -1,0 +1,19 @@
+Supported bot commands:
+
+add [name] [phone]
+ - Adds new contact record with name and phone number
+
+change [name] [phone]
+ - Changes phone number for contact
+
+phone [name]
+ - Shows phone number for contact
+
+show all
+ - Prints all contacts info
+
+good bye
+close
+exit
+stop
+ - Stops work and exits bot
