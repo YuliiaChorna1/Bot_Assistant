@@ -2,7 +2,7 @@ from pathlib import Path
 from functools import reduce
 
 records = {}
-
+help_txt = ""
 
 def input_error(*expected_args):
     def input_error_wrapper(func):
@@ -39,10 +39,11 @@ def unknown_handler(*args):
     return f"Unknown command. Use help: \n{help_handler(*args)}"
 
 def help_handler(*args):
-    output = ""
-    with open("help.txt") as file:
-        output = "".join(file.readlines())
-    return output
+    global help_txt
+    if not help_txt:
+        with open("help.txt") as file:            
+            help_txt = "".join(file.readlines())
+    return help_txt
 
 @input_error("name", "phone")
 @normalize_phone
