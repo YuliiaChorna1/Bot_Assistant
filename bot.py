@@ -3,9 +3,6 @@ from functools import reduce
 from collections import UserDict
 
 
-
-help_txt = ""
-
 class DuplicatedPhoneError(Exception):
     ...
 
@@ -124,10 +121,6 @@ class Record:
         
 
 class AddressBook(UserDict):
-    def __init__(self) -> None:
-        self.counter = 0
-        super().__init__()
-
     def add_record(self, record: Record):
         self.data[record.name.value] = record
 
@@ -145,9 +138,11 @@ class AddressBook(UserDict):
         return list(self.data.values())
     
     def iterator(self, n=2):
-        while self.counter <= len(self.__values()):
-            yield self.__values()[self.counter: self.counter + n]
-            self.counter += n
+        counter = 0
+        values = self.__values()
+        while counter < len(values):
+            yield list(map(lambda record: str(record), values[counter: counter + n]))
+            counter += n
 
 
 records = AddressBook()
@@ -167,8 +162,8 @@ def input_error(*expected_args):
                 return f"Phone format '{args[1]}' is incorrect. Use digits only for phone number."
             except DuplicatedPhoneError as phone_error:
                 return f"Phone number {phone_error.args[1]} already exists for contact {phone_error.args[0]}."
-            # except AttributeError:
-            #     return f"Contact {args[0]} doesn't have birthday yet."
+            except AttributeError:
+                return f"Contact {args[0]} doesn't have birthday yet."
         return inner
     return input_error_wrapper
 
@@ -180,14 +175,17 @@ def capitalize_user_name(func):
     return inner
 
 def unknown_handler(*args):
-    return f"Unknown command. Use help: \n{help_handler(*args)}"
+    return f"Unknown command. Use <help>"
 
-def help_handler(*args):
-    global help_txt
-    if not help_txt:
-        with open("help.txt") as file:            
-            help_txt = "".join(file.readlines())
-    return help_txt
+def help_handler():
+    help_txt = ""
+    def inner(*args):
+        nonlocal help_txt
+        if not help_txt:
+            with open("help.txt") as file:            
+                help_txt = "".join(file.readlines())
+        return help_txt
+    return inner
 
 @capitalize_user_name
 @input_error("name", "phone")
@@ -266,13 +264,10 @@ def phone_handler(*args):
     
 @input_error([])
 def show_all_handler(*args):
-    #contacts = map(lambda record: f"{record}", records.values())
-    contacts = map(lambda record: f"{record}", records.iterator())
-    #contacts = records.iterator()
-    return contacts
+    return records.iterator()
 
 COMMANDS = {
-            help_handler: "help",
+            help_handler(): "help",
             greeting_handler: "hello",
             add_handler: "add",
             change_handler: "change",
@@ -298,12 +293,12 @@ def main():
         
         func, data = parser(user_input)
         result = func(*data)
-        if not isinstance(result, str):
-            for i in result:
-                print("\n".join(i))
-                input("Press enter ")
+        if isinstance(result, str):
+            print(result)
         else:
-            print(func(*data))
+            for i in result:                
+                print ("\n".join(i))
+                input("Press enter to show more records")
 
 
 if __name__ == "__main__":

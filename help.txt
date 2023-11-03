@@ -3,6 +3,12 @@ Supported bot commands:
 add [name] [phone-1] [phone-2] ... [phone-n]
  - Adds new contact record with name and phone number
 
+ birthday [name] [date]
+ - Adds birthday for contact. Format for date: DD-MM-YYYY
+
+ birthday [name]
+- Shows how many days till the contact's next birthday
+
 change [name] [old phone] [new phone]
  - Changes phone number for contact
 
