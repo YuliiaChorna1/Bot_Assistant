@@ -1,8 +1,156 @@
-from pathlib import Path
+from datetime import date, timedelta
 from functools import reduce
+from collections import UserDict
 
-records = {}
+
+
 help_txt = ""
+
+class DuplicatedPhoneError(Exception):
+    ...
+
+
+class Field:
+    def __init__(self, value: str):
+        self.__value = value
+
+    def __str__(self):
+        return str(self.__value)
+    
+    def _set_value(self, value: str):
+        self.__value = value
+
+    @property
+    def value(self):
+        return self.__value
+
+
+class Name(Field):
+    ...
+
+
+class Phone(Field):
+    def __init__(self, value: str) -> None:
+        self.value = value
+    
+    @property
+    def value(self):
+        return super().value
+
+    @value.setter
+    def value(self, value: str):
+        super()._set_value(self.__validate(value))
+
+    def __validate(self, value: str) -> str:
+        value = reduce((lambda a, b: a.replace(b, "")), "+()-", value)        
+        if value.isdigit() and len(value) == 10:
+            return value
+        else:
+            raise ValueError(f"Phone number'{value}' is incorrect. Phone number should consist of 10 digits.")
+        
+class Birthday(Field):
+    def __init__(self, value: str) -> None:
+        self.value = value
+
+    @property
+    def value(self):
+        return super().value
+
+    @property
+    def date(self):
+        return date(self.__year, self.__month, self.__day)
+        
+    @value.setter
+    def value(self, value: str):
+        self.__year, self.__month, self.__day = self.__validate(value)
+        super()._set_value(f"{self.__day}-{self.__month}-{self.__year}")
+
+    def __validate(self, value: str) -> tuple:
+        separator = "." if "." in value else "/" if "/" in value else "-"
+        date_parts = value.split(separator)
+        if len(date_parts) == 3:
+            day, month, year = date_parts[:]
+            if day.isdigit() and month.isdigit() and year.isdigit():
+                if date(int(year), int(month), int(day)):
+                    return int(year), int(month), int(day)
+        raise ValueError(f"Birthday '{value}' format is incorrect. Use DD-MM-YYYY format")
+
+
+class Record:
+    def __init__(self, name: str, phone=None, birthday=None):
+        self.name = Name(name)
+        self.phones = [Phone(phone)] if phone else []
+        self.birthday = Birthday(birthday) if birthday else "Not set"
+
+    def __str__(self):
+        return f"Contact name: {self.name.value}, phones: {'; '.join(p.value for p in self.phones)}, birthday: {self.birthday}"
+    
+    def add_phone(self, phone: str): 
+        existing_phone = self.find_phone(phone)
+        if not existing_phone:
+            self.phones.append(Phone(phone))
+        else:
+            raise DuplicatedPhoneError(self.name, phone)
+
+    def add_birthday(self, birthday: str):
+        self.birthday = Birthday(birthday)
+
+    def days_to_birthday(self) -> int:
+        next_birthday = self.birthday.date.replace(year=date.today().year)
+        if next_birthday < date.today():
+            next_birthday = next_birthday.replace(year=next_birthday.year+1)
+        delta = next_birthday - date.today()
+        return delta.days
+
+    def edit_phone(self, old_phone: str, new_phone: str):
+        existing_phone = self.find_phone(old_phone)
+        if existing_phone:
+            idx = self.phones.index(existing_phone)
+            self.phones[idx] = Phone(new_phone)
+        else:
+            raise ValueError(f"Phone number {old_phone} not found for contact {self.name}.")
+                
+    def remove_phone(self, phone: str):
+        existing_phone = self.find_phone(phone)
+        if existing_phone:
+            self.phones.remove(existing_phone)
+        else:
+            raise ValueError(f"Phone number {phone} not found for contact {self.name}.")
+                            
+    def find_phone(self, phone: str):
+        existing_phone = list(filter(lambda p: p.value == phone, self.phones))
+        if len(existing_phone) > 0:
+            return existing_phone[0]
+        
+
+class AddressBook(UserDict):
+    def __init__(self) -> None:
+        self.counter = 0
+        super().__init__()
+
+    def add_record(self, record: Record):
+        self.data[record.name.value] = record
+
+    def find(self, name: str, suppress_error=False) -> Record:
+        if name in self.data.keys():
+            return self.data[name]
+        if not suppress_error:
+            raise KeyError
+
+    def delete(self, name: str):
+        if name in self.data.keys():
+            return self.data.pop(name)
+    
+    def __values(self):
+        return list(self.data.values())
+    
+    def iterator(self, n=2):
+        while self.counter <= len(self.__values()):
+            yield self.__values()[self.counter: self.counter + n]
+            self.counter += n
+
+
+records = AddressBook()
 
 def input_error(*expected_args):
     def input_error_wrapper(func):
@@ -13,20 +161,16 @@ def input_error(*expected_args):
                 return f"Please enter {' and '.join(expected_args)}"
             except KeyError:
                 return f"The record for contact {args[0]} not found. Try another contact or use help."
-            except ValueError:
+            except ValueError as error:
+                if error.args:
+                    return error.args[0]
                 return f"Phone format '{args[1]}' is incorrect. Use digits only for phone number."
+            except DuplicatedPhoneError as phone_error:
+                return f"Phone number {phone_error.args[1]} already exists for contact {phone_error.args[0]}."
+            # except AttributeError:
+            #     return f"Contact {args[0]} doesn't have birthday yet."
         return inner
     return input_error_wrapper
-
-def normalize_phone(func):
-    def inner(*args):
-        phone: str = args[1].strip()
-        phone = reduce((lambda a, b: a.replace(b, "")), "+()-", phone)
-        if int(phone):
-            new_args = list(args)
-            new_args[1] = phone
-            return func(*new_args)
-    return inner
 
 def capitalize_user_name(func):
     def inner(*args):
@@ -45,44 +189,87 @@ def help_handler(*args):
             help_txt = "".join(file.readlines())
     return help_txt
 
-@input_error("name", "phone")
-@normalize_phone
 @capitalize_user_name
+@input_error("name", "phone")
 def add_handler(*args):
     user_name = args[0]
-    user_phone = args[1]
-    if user_name not in records.keys():
-        records[user_name] = user_phone
-        return f"New record for {user_name} with phone number {user_phone} added."
+    user_phones = args[1:]
+    record = records.find(user_name, True)
+    if not record:
+        record = Record(user_name)
+        for user_phone in user_phones:
+            record.add_phone(user_phone)
+        records.add_record(record)
+        return f"New record added for {user_name} with phone number{'s' if len(user_phones) > 1 else ''}: {'; '.join(user_phones)}."
+    else:
+        response = []
+        for user_phone in user_phones:
+            record.add_phone(user_phone)
+            response.append(f"New phone number {user_phone} for contact {user_name} added.")
+        return "\n".join(response)
 
-@input_error("name", "phone")
-@normalize_phone
 @capitalize_user_name
+@input_error("name", "old_phone", "new_phone")
 def change_handler(*args):
     user_name = args[0]
-    new_phone = args[1]
-    rec = records[user_name]
-    if rec:
-        records[user_name] = new_phone
-        return f"Phone number for {user_name} changed to {new_phone}."
+    old_phone = args[1]
+    new_phone = args[2]
+    record = records.find(user_name)
+    if record:
+        record.edit_phone(old_phone, new_phone)
+        return f"Phone number for {user_name} changed from {old_phone} to {new_phone}."
+
+@capitalize_user_name    
+@input_error("name")
+def birthday_handler(*args):
+    user_name = args[0]
+    user_birthday = args[1] if len(args) > 1 else None
+    record = records.find(user_name)
+    if record:
+        if user_birthday:
+            record.add_birthday(user_birthday)
+            return f"Birthday {user_birthday} for contact {user_name} added."
+        else:
+            return f"{record.days_to_birthday()} days to the next {user_name}'s birthday ({record.birthday})."
+
+@capitalize_user_name    
+@input_error("name")
+def delete_handler(*args):
+    user_name = args[0]
+    user_phones = args[1:]
+    if len(user_phones) >= 1:
+        record = records.find(user_name)
+        if record:
+            response = []
+            for user_phone in user_phones:
+                record.remove_phone(user_phone)
+                response.append(f"Phone number {user_phone} for contact {user_name} removed.")
+            return "\n".join(response)
+    else:
+        if records.delete(user_name):
+            return f"Record for contact {user_name} deleted."
+        return f"Record for contact {user_name} not found."
+
 
 @input_error([])
 def greeting_handler(*args):
     greeting = "How can I help you?"
     return greeting
 
-@input_error("name")
 @capitalize_user_name
+@input_error("name")
 def phone_handler(*args):
     user_name = args[0]
-    phone = records[user_name]
-    if phone:
-        return phone
+    record = records.find(user_name)
+    if record:
+        return "; ".join(p.value for p in record.phones)
     
 @input_error([])
 def show_all_handler(*args):
-    contacts = map(lambda item: f"name: {item[0]}, phone: {item[1]}", records.items())
-    return "\n".join(contacts)
+    #contacts = map(lambda record: f"{record}", records.values())
+    contacts = map(lambda record: f"{record}", records.iterator())
+    #contacts = records.iterator()
+    return contacts
 
 COMMANDS = {
             help_handler: "help",
@@ -90,9 +277,11 @@ COMMANDS = {
             add_handler: "add",
             change_handler: "change",
             phone_handler: "phone",
+            birthday_handler: "birthday",
             show_all_handler: "show all",
+            delete_handler: "delete"
             }
-EXIT_COMMANDS = {"good bye", "close", "exit", "stop"}
+EXIT_COMMANDS = {"good bye", "close", "exit", "stop", "g"}
 
 def parser(text: str):
     for func, kw in COMMANDS.items():
@@ -108,7 +297,13 @@ def main():
             break
         
         func, data = parser(user_input)
-        print(func(*data))
+        result = func(*data)
+        if not isinstance(result, str):
+            for i in result:
+                print("\n".join(i))
+                input("Press enter ")
+        else:
+            print(func(*data))
 
 
 if __name__ == "__main__":

@@ -1,13 +1,19 @@
 Supported bot commands:
 
-add [name] [phone]
+add [name] [phone-1] [phone-2] ... [phone-n]
  - Adds new contact record with name and phone number
 
-change [name] [phone]
+change [name] [old phone] [new phone]
  - Changes phone number for contact
 
+delete [name] [phone-1] [phone-2] ... [phone-n]
+ - Deletes phone numbers for contact
+
+delete [name]
+ - Deletes contact by name
+
 phone [name]
- - Shows phone number for contact
+ - Shows phone numbers for contact
 
 show all
  - Prints all contacts info
