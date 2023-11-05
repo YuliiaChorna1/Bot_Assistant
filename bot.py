@@ -1,3 +1,5 @@
+import pickle
+from pathlib import Path
 from datetime import date, timedelta
 from functools import reduce
 from collections import UserDict
@@ -44,7 +46,8 @@ class Phone(Field):
             return value
         else:
             raise ValueError(f"Phone number'{value}' is incorrect. Phone number should consist of 10 digits.")
-        
+
+
 class Birthday(Field):
     def __init__(self, value: str) -> None:
         self.value = value
@@ -119,8 +122,16 @@ class Record:
         if len(existing_phone) > 0:
             return existing_phone[0]
         
+    def has_phone(self, term: str) -> bool:
+        phones = list(filter(lambda p: term in p.value, self.phones))
+        return len(phones) > 0
+        
 
 class AddressBook(UserDict):
+    def __init__(self, file_name):
+        self.__file_name = file_name
+        super().__init__()
+        
     def add_record(self, record: Record):
         self.data[record.name.value] = record
 
@@ -144,8 +155,22 @@ class AddressBook(UserDict):
             yield list(map(lambda record: str(record), values[counter: counter + n]))
             counter += n
 
+    def __enter__(self):
+        if Path(self.__file_name).exists():
+            with open(self.__file_name, "rb") as fh:
+                self.data = pickle.load(fh)
+        return self
 
-records = AddressBook()
+    def __exit__(self, exception_type, exception_value, traceback):
+        with open(self.__file_name, "wb") as fh:
+            pickle.dump(self.data, fh)
+    
+    def search_contacts(self, term):
+        result = list(filter(lambda contact: term in contact.name.value.lower() or contact.has_phone(term), self.data.values()))
+        return result
+
+
+records = None
 
 def input_error(*expected_args):
     def input_error_wrapper(func):
@@ -261,7 +286,15 @@ def phone_handler(*args):
     record = records.find(user_name)
     if record:
         return "; ".join(p.value for p in record.phones)
-    
+
+@input_error("term")
+def search_handler(*args):
+    term: str = args[0]
+    contacts = records.search_contacts(term)
+    if contacts:
+        return "\n".join(str(contact) for contact in contacts)
+    return f"No contacts found for '{term}'."
+
 @input_error([])
 def show_all_handler(*args):
     return records.iterator()
@@ -272,6 +305,7 @@ COMMANDS = {
             add_handler: "add",
             change_handler: "change",
             phone_handler: "phone",
+            search_handler: "search",
             birthday_handler: "birthday",
             show_all_handler: "show all",
             delete_handler: "delete"
@@ -285,20 +319,23 @@ def parser(text: str):
     return unknown_handler, []
 
 def main():
-    while True:
-        user_input = input(">>> ").lower()
-        if user_input in EXIT_COMMANDS:
-            print("Good bye!")
-            break
-        
-        func, data = parser(user_input)
-        result = func(*data)
-        if isinstance(result, str):
-            print(result)
-        else:
-            for i in result:                
-                print ("\n".join(i))
-                input("Press enter to show more records")
+    global records
+    with AddressBook("address_book.pkl") as book:
+        records = book
+        while True:
+            user_input = input(">>> ").lower()
+            if user_input in EXIT_COMMANDS:
+                print("Good bye!")
+                break
+            
+            func, data = parser(user_input)
+            result = func(*data)
+            if isinstance(result, str):
+                print(result)
+            else:
+                for i in result:                
+                    print ("\n".join(i))
+                    input("Press enter to show more records")
 
 
 if __name__ == "__main__":

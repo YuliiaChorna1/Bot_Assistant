@@ -21,6 +21,9 @@ delete [name]
 phone [name]
  - Shows phone numbers for contact
 
+search [term]
+ - Searches contacts by partial match of name or phone 
+
 show all
  - Prints all contacts info
 
